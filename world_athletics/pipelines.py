@@ -26,24 +26,38 @@ class AnchorGroupingPipeline:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def process_item(self, item, spider):
-        anchor_id = item["anchor_id"]
-        self.data[anchor_id].append(dict(item))
+        event_name = item.get("event_name", "unknown_event")
+        self.data[event_name].append(dict(item))
         return item
 
     def close_spider(self, spider):
-        for anchor_id, records in self.data.items():
-            safe_name = anchor_id.split("/")[-1]
+        for event_name, records in self.data.items():
+            safe_name = event_name.replace(" ", "_").lower()
             path = os.path.join(self.output_dir, f"{safe_name}.json")
 
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(records, f, ensure_ascii=False, indent=2)
 
 
-class WorldAthleteIndoorPipeline:
+class WorldAthleteIndoorAnchorPipeline:
     def open_spider(self, spider):
         self.output_dir = getattr(spider, "output_dir", "results")
         self.data = defaultdict(list)
         os.makedirs(self.output_dir, exist_ok=True)
 
+        ## Createa file path to store anchors
+        self.file_path = os.path.join(self.output_dir, "anchors.json")
+        self.file = open(self.file_path, "w", encoding="utf-8")
+
+        self.items = []
+
     def process_item(self, item, spider):
-        self.item.append()
+        if "anchor_link" not in item:
+            return item
+
+        self.items.append(dict(item))
+        return item
+
+    def close_spider(self, spider):
+        json.dump(self.items, self.file, ensure_ascii=False, indent=2)
+        self.file.close()

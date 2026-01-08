@@ -1,3 +1,4 @@
+from datetime import datetime
 import scrapy
 
 
@@ -10,13 +11,19 @@ class AnchorCollectorSpider(scrapy.Spider):
 
     output_dir = "results_for_world_athletics_championships"
 
+    log_dir = "logs"
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     # def parse(self, response):
     #     pass
 
     custom_settings = {
         "ITEM_PIPELINES": {
             "world_athletics.pipelines.AnchorGroupingPipeline": 300,
-        }
+        },
+        "LOG_ENABLED": True,
+        "LOG_LEVEL": "DEBUG",
+        "LOG_FILE": f"logs/{name}/world_athlete_{run_id}.log",
     }
 
     def start_requests(self):
