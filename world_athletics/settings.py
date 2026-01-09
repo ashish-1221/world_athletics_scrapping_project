@@ -98,7 +98,7 @@ DOWNLOAD_HANDLERS = {
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 
 PLAYWRIGHT_LAUNCH_OPTIONS = {
-    "headless": False,
+    "headless": True,
     "timeout": 10000,
     # "args": ["--disable-images", "--no-sandbox", "--disable-gpu"],
     # "args": [
@@ -108,3 +108,6 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
     #     "--disable-dev-shm-usage",
     # ],
 }
+
+LOG_LEVEL = "INFO"
+LOG_ENABLED = True

@@ -1,5 +1,10 @@
 from datetime import datetime
 import scrapy
+from datetime import datetime
+import logging
+import logging.config
+import os
+from datetime import datetime
 
 
 class AnchorCollectorSpider(scrapy.Spider):
@@ -11,8 +16,14 @@ class AnchorCollectorSpider(scrapy.Spider):
 
     output_dir = "results_for_world_athletics_championships"
 
-    log_dir = "logs"
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_id: str
+    base_log_dir: str
+    error_log_dir: str
+    info_log_dir: str
+    fail_log_dir: str
+
+    # log_dir = "logs"
+    # run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # def parse(self, response):
     #     pass
@@ -21,10 +32,68 @@ class AnchorCollectorSpider(scrapy.Spider):
         "ITEM_PIPELINES": {
             "world_athletics.pipelines.AnchorGroupingPipeline": 300,
         },
-        "LOG_ENABLED": True,
-        "LOG_LEVEL": "DEBUG",
-        "LOG_FILE": f"logs/{name}/world_athlete_{run_id}.log",
     }
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        spider = super().from_crawler(crawler, *args, **kwargs)
+
+        spider.run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        spider.base_log_dir = f"logs/{spider.name}"
+        spider.error_log_dir = f"{spider.base_log_dir}/error_log"
+        spider.info_log_dir = f"{spider.base_log_dir}/info_log"
+        spider.fail_log_dir = f"{spider.base_log_dir}/fail_log"
+        os.makedirs(spider.error_log_dir, exist_ok=True)
+        os.makedirs(spider.info_log_dir, exist_ok=True)
+        os.makedirs(spider.fail_log_dir, exist_ok=True)
+
+        logging.config.dictConfig(
+            {
+                "version": 1,
+                "disable_existing_loggers": False,
+                "formatters": {
+                    "standard": {
+                        "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+                    }
+                },
+                "handlers": {
+                    "info_file": {
+                        "class": "logging.FileHandler",
+                        "filename": f"{spider.info_log_dir}/info_{spider.run_id}.log",
+                        "formatter": "standard",
+                        "level": "INFO",
+                    },
+                    "error_file": {
+                        "class": "logging.FileHandler",
+                        "filename": f"{spider.error_log_dir}/error_{spider.run_id}.log",
+                        "formatter": "standard",
+                        "level": "ERROR",
+                    },
+                    "console": {
+                        "class": "logging.StreamHandler",
+                        "formatter": "standard",
+                        "level": "INFO",
+                    },
+                },
+                "root": {
+                    "handlers": ["console", "info_file", "error_file"],
+                    "level": "INFO",
+                },
+            }
+        )
+
+        spider.logger.info("Logging initialized for spider: %s", spider.name)
+        return spider
+
+    def errback_log(self, failure):
+        request = failure.request
+        with open(f"{self.fail_log_dir}/failed_urls_{self.run_id}.txt", "a") as f:
+            f.write(request.url + "\n")
+
+        self.logger.error(
+            f"Request failed: {request.url}",
+            exc_info=failure.value,
+        )
 
     def start_requests(self):
         # GET request
