@@ -12,8 +12,8 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
     name = "world_athlete_indoor"
     allowed_domains = ["worldathletics.org"]
     start_urls = [
-        "https://worldathletics.org/results/world-athletics-indoor-championships/2025/world-athletics-indoor-championships-7136586/men/400-metres/semi-final/summary",
-        # "https://worldathletics.org/results/world-athletics-indoor-championships/2024/world-athletics-indoor-championships-7180312/women/400-metres/heats/result#resultheader",
+        # "https://worldathletics.org/results/world-athletics-indoor-championships/2025/world-athletics-indoor-championships-7136586/men/400-metres/semi-final/summary",
+        "https://worldathletics.org/results/world-athletics-indoor-championships/2024/world-athletics-indoor-championships-7180312/women/400-metres/heats/result#resultheader",
         # "https://worldathletics.org/results/world-athletics-indoor-championships/2022/world-athletics-indoor-championships-7138985/men/400-metres/heats/result#resultheader",
     ]
 
@@ -100,16 +100,16 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
                 meta={
                     "playwright": True,
                     "playwright_include_page": True,
-                    "playwright_page_goto_kwargs": {
-                        "wait_until": "domcontentloaded",
-                        "timeout": 45000,
-                    },
-                    "playwright_page_goto_kwargs": {
-                        "wait_until": "domcontentloaded",
-                        "timeout": 45000,
-                    },
+                    # "playwright_page_goto_kwargs": {
+                    #     "wait_until": "domcontentloaded",
+                    #     "timeout": 45000,
+                    # },
+                    # "playwright_page_goto_kwargs": {
+                    #     "wait_until": "domcontentloaded",
+                    #     "timeout": 45000,
+                    # },
                     "playwright_page_methods": [
-                        PageMethod("wait_for_timeout", 50000),
+                        # PageMethod("wait_for_timeout", 50000),
                         PageMethod(
                             "wait_for_selector",
                             "a[data-bind*='showevents']",
@@ -149,7 +149,7 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
                 meta={
                     "playwright": True,
                     "playwright_include_page": True,
-                    "playwright_page_methods": [],
+                    # "playwright_page_methods": [],
                     "handle_httpstatus_list": [404],
                 },
                 cb_kwargs={"anchor_id": anchor_id},
@@ -250,7 +250,7 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
             await tab_li.locator("a").click()
 
         try:
-            await page.wait_for_selector("table.records-table", timeout=15000)
+            await page.wait_for_selector("table.records-table", timeout=25000)
         except Exception as e:
             self.logger.warning("Results table not found on %s: %s", response.url, e)
             return
