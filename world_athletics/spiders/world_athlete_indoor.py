@@ -104,6 +104,10 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
                         "wait_until": "domcontentloaded",
                         "timeout": 45000,
                     },
+                    "playwright_page_goto_kwargs": {
+                        "wait_until": "domcontentloaded",
+                        "timeout": 45000,
+                    },
                     "playwright_page_methods": [
                         PageMethod("wait_for_timeout", 50000),
                         PageMethod(
@@ -224,123 +228,192 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
         page = response.meta["playwright_page"]
 
         await page.content()
-        if round_name.lower().strip() != "final":
-            await page.wait_for_load_state("networkidle")
-            nav = page.locator("div.res-nav-container")
 
-            summary_li = nav.locator("li", has_text="Summary")
+        try:
+            await page.wait_for_selector("div.res-nav-container", timeout=15000)
+        except Exception as e:
+            self.logger.warning(
+                "Navigation container not found on %s: %s", response.url, e
+            )
+            return
+        nav = page.locator("div.res-nav-container")
 
-            if await summary_li.count() == 0:
-                self.logger.warning("Summary tab not found on %s", response.url)
-                return
+        tab_name = "Result" if round_name.lower().strip() == "final" else "Summary"
+        tab_li = nav.locator("li", has_text=tab_name)
 
-            is_active = await summary_li.evaluate(
-                "el => el.classList.contains('active')"
+        if await tab_li.count() == 0:
+            self.logger.warning("%s tab not found on %s", tab_name, response.url)
+            return
+
+        is_active = await tab_li.evaluate("el => el.classList.contains('active')")
+        if not is_active:
+            await tab_li.locator("a").click()
+
+        try:
+            await page.wait_for_selector("table.records-table", timeout=15000)
+        except Exception as e:
+            self.logger.warning("Results table not found on %s: %s", response.url, e)
+            return
+
+        html = await page.content()
+        response = response.replace(body=html)
+
+        rows = response.xpath("//table[contains(@class,'records-table')]/tbody/tr")
+
+        for row in rows:
+            pos = row.xpath('./td[@data-th="POS"]/text()').get()
+            rank = row.xpath('./td[@data-th="Rank"]/text()').get()
+            heat = row.xpath('./td[@data-th="Heat"]/text()').get()
+
+            athlete_name = row.xpath(
+                "normalize-space(string(.//td[translate(@data-th,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='athlete']//a))"
+            ).get()
+
+            country = " ".join(
+                t.strip()
+                for t in row.xpath('./td[@data-th="COUNTRY"]//text()').getall()
+                if t.strip()
             )
 
-            if not is_active:
-                await summary_li.locator("a").click()
-
-            await page.wait_for_selector(
-                "div#results.site-container div.row table.records-table", timeout=15000
+            mark = " ".join(
+                t.strip()
+                for t in row.xpath(".//td[@data-th='RESULTS']//span/text()").getall()
+                if t.strip()
             )
 
-            html = await page.content()
+            yield {
+                "anchor_id": anchor_id,
+                "competition_name": competition_name,
+                "competition_description": competition_description,
+                "event_name": event_name,
+                "round_name": round_name,
+                "position": pos,
+                "rank": rank,
+                "heat": heat,
+                "athlete": athlete_name,
+                "country": country,
+                "mark": mark,
+            }
 
-            response = response.replace(body=html)
+        await page.close()
 
-            rows = response.xpath(
-                ".//table[contains(@class,'records-table')]/tbody//tr"
-            )
+        # if round_name.lower().strip() != "final":
+        #     # await page.wait_for_load_state("networkidle")
+        #     nav = page.locator("div.res-nav-container")
 
-            for row in rows:
-                pos = row.xpath('./td[@data-th="POS"]/text()').get()
-                rank = row.css("td[data-th='Rank']::text").get()
-                heat = row.css("td[data-th='Heat']::text").get()
-                athlete_name = row.xpath(
-                    "normalize-space(string(.//td[translate(@data-th,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='athlete']//a))"
-                ).get()
-                # athlete_name = " ".join(t.strip() for t in athlete_name if t.strip())
-                country = row.xpath('./td[@data-th="COUNTRY"]//text()').getall()
-                mark = " ".join(
-                    t.strip()
-                    for t in row.css("td[data-th='RESULTS'] span::text").getall()
-                    if t.strip()
-                )
-                yield {
-                    "anchor_id": anchor_id,
-                    "competition_name": competition_name,
-                    "competition_description": competition_description,
-                    "event_name": event_name,
-                    "round_name": round_name,
-                    "position": pos,
-                    "rank": rank,
-                    "heat": heat,
-                    "athlete": athlete_name,
-                    "country": country,
-                    "mark": mark,
-                }
-        else:
-            await page.wait_for_load_state("networkidle")
-            nav = page.locator("div.res-nav-container.module")
+        #     summary_li = nav.locator("li", has_text="Summary")
 
-            summary_li = nav.locator("li", has_text="Result")
+        #     if await summary_li.count() == 0:
+        #         self.logger.warning("Summary tab not found on %s", response.url)
+        #         return
 
-            if await summary_li.count() == 0:
-                self.logger.warning("Final tab not found on %s", response.url)
-                return
+        #     is_active = await summary_li.evaluate(
+        #         "el => el.classList.contains('active')"
+        #     )
 
-            is_active = await summary_li.evaluate(
-                "el => el.classList.contains('active')"
-            )
+        #     if not is_active:
+        #         await summary_li.locator("a").click()
 
-            if not is_active:
-                await summary_li.locator("a").click()
+        #     await page.wait_for_selector(
+        #         "div#results.site-container div.row table.records-table", timeout=15000
+        #     )
 
-            await page.wait_for_selector(
-                "div#results.site-container div.row table.records-table", timeout=15000
-            )
+        #     html = await page.content()
 
-            html = await page.content()
+        #     response = response.replace(body=html)
 
-            response = response.replace(body=html)
-            rows = response.xpath(
-                "//table[contains(@class,'records-table') and contains(@class,'clickable')]/tbody/tr"
-            )
+        #     rows = response.xpath(
+        #         ".//table[contains(@class,'records-table')]/tbody//tr"
+        #     )
 
-            for row in rows:
-                pos = row.xpath('./td[@data-th="POS"]/text()').get()
-                rank = row.css("td[data-th='Rank']::text").get()
-                heat = row.css("td[data-th='Heat']::text").get()
-                athlete_name = row.xpath(
-                    "normalize-space(string(.//td[translate(@data-th,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='athlete']//a))"
-                ).get()
+        #     for row in rows:
+        #         pos = row.xpath('./td[@data-th="POS"]/text()').get()
+        #         rank = row.css("td[data-th='Rank']::text").get()
+        #         heat = row.css("td[data-th='Heat']::text").get()
+        #         athlete_name = row.xpath(
+        #             "normalize-space(string(.//td[translate(@data-th,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='athlete']//a))"
+        #         ).get()
+        #         # athlete_name = " ".join(t.strip() for t in athlete_name if t.strip())
+        #         country = row.xpath('./td[@data-th="COUNTRY"]//text()').getall()
+        #         mark = " ".join(
+        #             t.strip()
+        #             for t in row.css("td[data-th='RESULTS'] span::text").getall()
+        #             if t.strip()
+        #         )
+        #         yield {
+        #             "anchor_id": anchor_id,
+        #             "competition_name": competition_name,
+        #             "competition_description": competition_description,
+        #             "event_name": event_name,
+        #             "round_name": round_name,
+        #             "position": pos,
+        #             "rank": rank,
+        #             "heat": heat,
+        #             "athlete": athlete_name,
+        #             "country": country,
+        #             "mark": mark,
+        #         }
+        # else:
+        #     # await page.wait_for_load_state("networkidle")
+        #     nav = page.locator("div.res-nav-container.module")
 
-                # athlete_name = " ".join(t.strip() for t in athlete_name if t.strip())
-                country = row.xpath('./td[@data-th="COUNTRY"]//text()').getall()
-                mark = " ".join(
-                    t.strip()
-                    for t in row.css("td[data-th='RESULTS'] span::text").getall()
-                    if t.strip()
-                )
+        #     summary_li = nav.locator("li", has_text="Result")
 
-                if not mark:
-                    mark = " ".join(
-                        t.strip()
-                        for t in row.css("td[data-th='MARK'] ::text").getall()
-                        if t.strip()
-                    )
+        #     if await summary_li.count() == 0:
+        #         self.logger.warning("Final tab not found on %s", response.url)
+        #         return
 
-                yield {
-                    "anchor_id": anchor_id,
-                    "competition_name": competition_name,
-                    "competition_description": competition_description,
-                    "event_name": event_name,
-                    "round_name": round_name,
-                    "position": pos,
-                    "rank": rank,
-                    "heat": heat,
-                    "athlete": athlete_name,
-                    "country": country,
-                    "mark": mark,
-                }
+        #     is_active = await summary_li.evaluate(
+        #         "el => el.classList.contains('active')"
+        #     )
+
+        #     if not is_active:
+        #         await summary_li.locator("a").click()
+
+        #     await page.wait_for_selector(
+        #         "div#results.site-container div.row table.records-table", timeout=15000
+        #     )
+
+        #     html = await page.content()
+
+        #     response = response.replace(body=html)
+        #     rows = response.xpath(
+        #         "//table[contains(@class,'records-table') and contains(@class,'clickable')]/tbody/tr"
+        #     )
+
+        #     for row in rows:
+        #         pos = row.xpath('./td[@data-th="POS"]/text()').get()
+        #         rank = row.css("td[data-th='Rank']::text").get()
+        #         heat = row.css("td[data-th='Heat']::text").get()
+        #         athlete_name = row.xpath(
+        #             "normalize-space(string(.//td[translate(@data-th,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='athlete']//a))"
+        #         ).get()
+
+        #         # athlete_name = " ".join(t.strip() for t in athlete_name if t.strip())
+        #         country = row.xpath('./td[@data-th="COUNTRY"]//text()').getall()
+        #         mark = " ".join(
+        #             t.strip()
+        #             for t in row.css("td[data-th='RESULTS'] span::text").getall()
+        #             if t.strip()
+        #         )
+
+        #         if not mark:
+        #             mark = " ".join(
+        #                 t.strip()
+        #                 for t in row.css("td[data-th='MARK'] ::text").getall()
+        #                 if t.strip()
+        #             )
+
+        #         yield {
+        #             "anchor_id": anchor_id,
+        #             "competition_name": competition_name,
+        #             "competition_description": competition_description,
+        #             "event_name": event_name,
+        #             "round_name": round_name,
+        #             "position": pos,
+        #             "rank": rank,
+        #             "heat": heat,
+        #             "athlete": athlete_name,
+        #             "country": country,
+        #             "mark": mark,
+        #         }
