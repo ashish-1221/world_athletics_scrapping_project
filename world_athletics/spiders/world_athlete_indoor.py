@@ -116,6 +116,7 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
                             state="visible",
                         ),
                         PageMethod("click", "a[data-bind*='showevents']"),
+                        # PageMethod("wait_for_timeout", 50000),
                     ],
                 },
                 callback=self.parse_anchors,
@@ -127,7 +128,9 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
 
         page = response.meta["playwright_page"]
 
-        await page.content()
+        html = await page.content()
+
+        response = response.replace(body=html)
 
         anchors = response.xpath(
             "//div[contains(@class,'modal-dialog')]//tr[contains(@class,'eventdetailslanding')]//a"
@@ -249,8 +252,10 @@ class WorldAthleteIndoorSpider(scrapy.Spider):
         if not is_active:
             await tab_li.locator("a").click()
 
+        await page.content()
+
         try:
-            await page.wait_for_selector("table.records-table", timeout=25000)
+            await page.wait_for_selector("table.records-table", timeout=15000)
         except Exception as e:
             self.logger.warning("Results table not found on %s: %s", response.url, e)
             return
